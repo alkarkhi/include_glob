@@ -1,0 +1,18 @@
+[package]
+name = "include_glob"
+version = "0.1.0"
+authors = "Mohammed Jassim Alkarkhi <mohammed@alkarkhi.com>"
+edition = "2021"
+description = "embed files into an executable via glob patterns"
+repository = "https://github.com/alkarkhi/include_glob"
+license = "MIT OR Apache-2.0"
+keywords = ["include", "glob", "embed"]
+categories = ["no-std"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+proc-macro = true
+
+[dependencies]
+glob = "0.3.1"
