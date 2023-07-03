@@ -1,7 +1,7 @@
 [package]
 name = "include_glob"
 version = "0.1.0"
-authors = "Mohammed Jassim Alkarkhi <mohammed@alkarkhi.com>"
+authors = ["Mohammed Jassim Alkarkhi <mohammed@alkarkhi.com>"]
 edition = "2021"
 description = "embed files into an executable via glob patterns"
 repository = "https://github.com/alkarkhi/include_glob"
