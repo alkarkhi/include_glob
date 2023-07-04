@@ -1,6 +1,6 @@
 [package]
 name = "include_glob"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Mohammed Jassim Alkarkhi <mohammed@alkarkhi.com>"]
 edition = "2021"
 description = "embed files into an executable via glob patterns"
