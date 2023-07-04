@@ -1,18 +1,18 @@
-use std::fs;
+use std::{fs, path::PathBuf};
 
-use glob::glob;
-use proc_macro::{TokenStream, TokenTree, Punct, Spacing, Group, Delimiter, Literal};
+use glob::glob as glob_inner;
+use proc_macro::{Delimiter, Group, Literal, Punct, Spacing, TokenStream, TokenTree};
 
 /// Includes a file as a reference to a byte array via a glob pattern.
-/// 
+///
 /// # Examples
-/// 
+///
 /// Assume there is a file `file.123.txt` with contents `hello world`:
-/// 
-/// 
+///
+///
 /// ```rust
 /// use include_glob::include_glob_bytes;
-/// 
+///
 /// static FILE: &[u8] = include_glob_bytes!("file.*.txt");
 /// assert_eq!(FILE, b"hello world");
 /// ```
@@ -22,15 +22,15 @@ pub fn include_glob_bytes(input: TokenStream) -> TokenStream {
 }
 
 /// Includes a UTF-8 encoded file as a string via a glob pattern.
-/// 
+///
 /// # Examples
-/// 
+///
 /// Assume there is a file `file.123.txt` with contents `hello world`:
-/// 
-/// 
+///
+///
 /// ```rust
 /// use include_glob::include_glob_str;
-/// 
+///
 /// static FILE: &str = include_glob_str!("file.*.txt");
 /// assert_eq!(FILE, "hello world");
 /// ```
@@ -39,61 +39,82 @@ pub fn include_glob_str(input: TokenStream) -> TokenStream {
     str_to_token_stream(include_glob_inner(input))
 }
 
-fn include_glob_inner(input: TokenStream) -> Vec<u8> {
-    let tokens = input.into_iter().collect::<Vec<TokenTree>>();
+#[proc_macro]
+pub fn glob(input: TokenStream) -> TokenStream {
+    let path = get_path(input);
 
-    match tokens.as_slice() {
-        [TokenTree::Literal(lit)] => {
-            let pattern = lit.to_string();
-
-            if !pattern.starts_with('"') || !pattern.ends_with('"') {
-                panic!("this macro only accepts a string argument")
-            }
-
-            let pattern: &str = &pattern[1..(pattern.len() - 1)];
-
-            let mut files = match glob(pattern) {
-                Ok(files) => files,
-                Err(e) => panic!("invalid glob pattern: {}", e),
-            };
-
-            let path = match files.next() {
-                Some(file) => {
-                    match file {
-                        Ok(file) => file,
-                        Err(e) => panic!("couldn't read {path}: {e}", path = e.path().display()),
-                    }
-                },
-                None => panic!("no file found that matches pattern {pattern}"),
-            };
-
-            // only one file should match the pattern so builds are deterministic
-            if files.next().is_some() {
-                panic!("pattern is valid for multiple files");
-            }
-
-            let bytes: Vec<u8> = match fs::read(&path) {
-                Ok(bytes) => bytes,
-                Err(e) => panic!("couldn't read {path}: {e}", path = path.display()),
-            };
-
-            bytes
+    let string = match path.file_name() {
+        Some(path) => match path.to_str() {
+            Some(string) => string,
+            None => panic!("file name is not valid utf8"),
         },
+        None => panic!("couldn't read file name"),
+    };
+
+    TokenStream::from(TokenTree::Literal(Literal::string(string)))
+}
+
+fn include_glob_inner(input: TokenStream) -> Vec<u8> {
+    let path = get_path(input);
+
+    let bytes: Vec<u8> = match fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(e) => panic!("couldn't read {path}: {e}", path = path.display()),
+    };
+
+    bytes
+}
+
+fn get_path(input: TokenStream) -> PathBuf {
+    let mut iter = input.into_iter();
+
+    let pattern = match iter.next() {
+        Some(TokenTree::Literal(lit)) => lit.to_string(),
         _ => panic!("input needs to be a string"),
+    };
+
+    if iter.next().is_some() {
+        panic!("input can only be one string");
     }
+
+    if !pattern.starts_with('"') || !pattern.ends_with('"') {
+        panic!("this macro only accepts a string argument")
+    }
+
+    let pattern: &str = &pattern[1..(pattern.len() - 1)];
+
+    let mut files = match glob_inner(pattern) {
+        Ok(files) => files,
+        Err(e) => panic!("invalid glob pattern: {}", e),
+    };
+
+    let path = match files.next() {
+        Some(file) => match file {
+            Ok(file) => file,
+            Err(e) => panic!("couldn't read {path}: {e}", path = e.path().display()),
+        },
+        None => panic!("no file found that matches pattern {pattern}"),
+    };
+
+    // only one file should match the pattern so builds are deterministic
+    if files.next().is_some() {
+        panic!("pattern is valid for multiple files");
+    }
+
+    path
 }
 
 fn bytes_to_token_stream(bytes: Vec<u8>) -> TokenStream {
-    let mut bytes_ts: Vec<TokenTree> = Vec::with_capacity(bytes.len() * 2);
+    let mut tt: Vec<TokenTree> = Vec::with_capacity(bytes.len() * 2);
 
     for byte in bytes {
-        bytes_ts.push(TokenTree::Literal(Literal::u8_unsuffixed(byte)));
-        bytes_ts.push(TokenTree::Punct(Punct::new(',', Spacing::Alone)));
+        tt.push(TokenTree::Literal(Literal::u8_unsuffixed(byte)));
+        tt.push(TokenTree::Punct(Punct::new(',', Spacing::Alone)));
     }
 
     let res: [TokenTree; 2] = [
         TokenTree::Punct(Punct::new('&', Spacing::Alone)),
-        TokenTree::Group(Group::new(Delimiter::Bracket, TokenStream::from_iter(bytes_ts))),
+        TokenTree::Group(Group::new(Delimiter::Bracket, TokenStream::from_iter(tt))),
     ];
 
     TokenStream::from_iter(res)
